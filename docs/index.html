@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🗾 DR対策 — 日本地震・活断層モニター</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif;
+         background: #0d1117; color: #c9d1d9; line-height: 1.6; }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ヘッダー */
+  header { background: #161b22; border-bottom: 1px solid #30363d; padding: 16px 24px;
+            display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  header h1 { font-size: 1.3em; font-weight: 700; }
+  header h1 span { color: #58a6ff; }
+  .update-info { font-size: 0.8em; color: #8b949e; text-align: right; }
+
+  /* アラートバナー */
+  .alert-banner { padding: 12px 24px; font-weight: 600; font-size: 1em;
+                   border-bottom: 2px solid; text-align: center; }
+
+  /* メインレイアウト */
+  .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  @media (max-width: 900px) {
+    .grid-2 { grid-template-columns: 1fr; }
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 500px) {
+    .grid-4 { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* カード */
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px; }
+  .card h2 { font-size: 0.85em; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em;
+              margin-bottom: 8px; }
+  .card .big { font-size: 2.4em; font-weight: 700; color: #f0f6fc; }
+  .card .sub { font-size: 0.85em; color: #8b949e; margin-top: 4px; }
+
+  /* マップ */
+  #map { height: 520px; border-radius: 10px; border: 1px solid #30363d; margin-bottom: 20px; }
+
+  /* セクション */
+  .section { margin-bottom: 24px; }
+  .section-title { font-size: 1.05em; font-weight: 700; color: #f0f6fc; margin-bottom: 14px;
+                    padding-bottom: 8px; border-bottom: 1px solid #30363d; }
+
+  /* テーブル */
+  .quake-table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
+  .quake-table th { background: #1c2129; color: #8b949e; font-weight: 600; padding: 8px 10px;
+                     text-align: left; border-bottom: 1px solid #30363d; }
+  .quake-table td { padding: 7px 10px; border-bottom: 1px solid #21262d; }
+  .quake-table tr:hover td { background: #1c2129; }
+
+  /* チャート */
+  .chart-wrap { position: relative; height: 220px; }
+
+  /* 活断層解説 */
+  .fault-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .fault-card { background: #1c2129; border: 1px solid #30363d; border-radius: 8px; padding: 14px; }
+  .fault-card h3 { font-size: 0.95em; font-weight: 700; color: #f0f6fc; margin-bottom: 6px; }
+  .fault-card .tag { display: inline-block; font-size: 0.72em; padding: 2px 7px; border-radius: 4px;
+                      font-weight: 600; margin-bottom: 6px; }
+  .tag-s { background: #3d1a1a; color: #ff7b72; }
+  .tag-a { background: #2d1f00; color: #ffa657; }
+  .fault-card p { font-size: 0.82em; color: #8b949e; line-height: 1.5; }
+
+  /* 予測・対策セクション */
+  .risk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+  .risk-card { background: #1c2129; border-left: 4px solid; border-radius: 0 8px 8px 0; padding: 16px; }
+  .risk-card h3 { font-size: 0.95em; font-weight: 700; color: #f0f6fc; margin-bottom: 4px; }
+  .risk-card .prob { font-size: 1.4em; font-weight: 700; margin: 8px 0 4px; }
+  .risk-card p { font-size: 0.82em; color: #8b949e; line-height: 1.5; }
+  .risk-card .source { font-size: 0.75em; color: #58a6ff; margin-top: 6px; }
+  .measure-list { list-style: none; }
+  .measure-list li { padding: 10px 0; border-bottom: 1px solid #21262d; font-size: 0.88em; display: flex; gap: 10px; }
+  .measure-list li:last-child { border-bottom: none; }
+  .measure-list .icon { font-size: 1.2em; flex-shrink: 0; }
+  .measure-list .body { flex: 1; }
+  .measure-list .body strong { display: block; color: #f0f6fc; margin-bottom: 2px; }
+  .measure-list .body span { color: #8b949e; font-size: 0.9em; }
+
+  footer { background: #161b22; border-top: 1px solid #30363d; padding: 20px 24px;
+            font-size: 0.78em; color: #8b949e; text-align: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🗾 DR対策 — <span>日本地震・活断層モニター</span></h1>
+  <div class="update-info">
+    最終更新: 2026年06月26日 23:15 JST<br>
+    次回更新: 2026年06月27日 11:15 JST
+  </div>
+</header>
+
+<div class="alert-banner" style="background:#e67e2222;color:#e67e22;border-color:#e67e22">
+  今週の状況: 🟠 強い揺れに警戒　（週間最大 M6.9 / 16件）
+</div>
+
+<div class="container">
+
+  <!-- サマリーカード -->
+  <div class="section">
+    <div class="grid-4">
+      <div class="card">
+        <h2>📅 今日</h2>
+        <div class="big">4<span style="font-size:0.4em;color:#8b949e">件</span></div>
+        <div class="sub">最大 M5.8</div>
+      </div>
+      <div class="card">
+        <h2>📆 今週</h2>
+        <div class="big">16<span style="font-size:0.4em;color:#8b949e">件</span></div>
+        <div class="sub">最大 M6.9 / 平均 M4.8</div>
+      </div>
+      <div class="card">
+        <h2>🗓 今月</h2>
+        <div class="big">78<span style="font-size:0.4em;color:#8b949e">件</span></div>
+        <div class="sub">最大 M6.9 / 平均 M4.6</div>
+      </div>
+      <div class="card">
+        <h2>📊 今年（M3+）</h2>
+        <div class="big">1373<span style="font-size:0.4em;color:#8b949e">件</span></div>
+        <div class="sub">最大 M7.6</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- マップ -->
+  <div class="section">
+    <div class="section-title">🗺 地震発生マップ（直近30日・M2以上）＋ 主要活断層</div>
+    <div id="map"></div>
+  </div>
+
+  <!-- チャート -->
+  <div class="section">
+    <div class="grid-2">
+      <div class="card">
+        <div class="section-title">📈 日別発生件数（直近30日・M3以上）</div>
+        <div class="chart-wrap"><canvas id="dailyChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="section-title">📊 マグニチュード分布（今月）</div>
+        <div class="chart-wrap"><canvas id="magChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="card">
+      <div class="section-title">📅 月別発生件数（直近12ヶ月・M3以上）</div>
+      <div class="chart-wrap" style="height:180px"><canvas id="yearChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- 最新地震リスト -->
+  <div class="section">
+    <div class="card">
+      <div class="section-title">⚡ 最新地震情報（直近7日間・上位20件）</div>
+      <div style="overflow-x:auto">
+        <table class="quake-table">
+          <thead>
+            <tr><th>日時 (JST)</th><th>規模</th><th>深さ</th><th>震源地</th></tr>
+          </thead>
+          <tbody>
+        <tr>
+          <td>06/26 22:29</td>
+          <td style="color:#e67e22;font-weight:bold">M5.7</td>
+          <td>50.9km</td>
+          <td style="font-size:0.85em">7 km N of Oshino 日本</td>
+        </tr>
+        <tr>
+          <td>06/26 16:22</td>
+          <td style="color:#f1c40f;font-weight:bold">M4.4</td>
+          <td>39.2km</td>
+          <td style="font-size:0.85em">99 km ENE of Miyako 日本</td>
+        </tr>
+        <tr>
+          <td>06/26 12:46</td>
+          <td style="color:#e67e22;font-weight:bold">M5.8</td>
+          <td>43km</td>
+          <td style="font-size:0.85em">3 km SE of Yokoshiba 日本</td>
+        </tr>
+        <tr>
+          <td>06/26 01:11</td>
+          <td style="color:#f1c40f;font-weight:bold">M4.7</td>
+          <td>63.1km</td>
+          <td style="font-size:0.85em">36 km NNE of Kuji 日本</td>
+        </tr>
+        <tr>
+          <td>06/25 20:58</td>
+          <td style="color:#f1c40f;font-weight:bold">M4.8</td>
+          <td>66.6km</td>
+          <td style="font-size:0.85em">39 km NE of Kuji 日本</td>
+        </tr>
+        <tr>
+          <td>06/25 12:18</td>
+          <td style="color:#f1c40f;font-weight:bold">M4.4</td>
+          <td>127.9km</td>
+          <td style="font-size:0.85em">22 km WNW of Shikabe 日本</td>
+        </tr>
+        <tr>
+          <td>06/25 09:33</td>
+          <td style="color:#f1c40f;font-weight:bold">M4.3</td>
+          <td>64.6km</td>
+          <td style="font-size:0.85em">52 km NE of Kuji 日本</td>
+        </tr>
+        <tr>
+          <td>06/25 07:30</td>
+          <td style="color:#e74c3c;font-weight:bold">M6.9</td>
+          <td>50.9km</td>
+          <td style="font-size:0.85em">30 km ENE of Kuji 日本</td>
+        </tr>
+        <tr>
+          <td>06/23 20:36</td>
+          <td style="color:#f1c40f;font-weight:bold">M4.5</td>
+          <td>10km</td>
+          <td style="font-size:0.85em">Izu Islands 日本 region</td>
+        </tr>
+        <tr>
+          <td>06/23 07:20</td>
+          <td style="color:#f1c40f;font-weight:bold">M4.6</td>
+          <td>35km</td>
+          <td style="font-size:0.85em">10 km E of Miyakojima 日本</td>
+        </tr>
+        <tr>
+          <td>06/22 05:28</td>
+          <td style="color:#f1c40f;font-weight:bold">M4.4</td>
+          <td>10km</td>
+          <td style="font-size:0.85em">Izu Islands 日本 region</td>
+        </tr>
+        <tr>
+          <td>06/20 22:12</td>
+          <td style="color:#f1c40f;font-weight:bold">M4.5</td>
+          <td>16.0km</td>
+          <td style="font-size:0.85em">Izu Islands 日本 region</td>
+        </tr>
+        <tr>
+          <td>06/20 05:39</td>
+          <td style="color:#f1c40f;font-weight:bold">M4.3</td>
+          <td>81.0km</td>
+          <td style="font-size:0.85em">45 km ESE of Akkeshi 日本</td>
+        </tr>
+        <tr>
+          <td>06/20 04:36</td>
+          <td style="color:#f1c40f;font-weight:bold">M4.9</td>
+          <td>8.5km</td>
+          <td style="font-size:0.85em">127 km SSE of Itoman 日本</td>
+        </tr>
+        <tr>
+          <td>06/20 03:16</td>
+          <td style="color:#f1c40f;font-weight:bold">M4.5</td>
+          <td>216.3km</td>
+          <td style="font-size:0.85em">20 km SE of Nyūzen 日本</td>
+        </tr>
+        <tr>
+          <td>06/20 01:47</td>
+          <td style="color:#f1c40f;font-weight:bold">M4.7</td>
+          <td>10km</td>
+          <td style="font-size:0.85em">149 km ENE of Miyako 日本</td>
+        </tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 活断層解説 -->
+  <div class="section">
+    <div class="section-title">🔴 主要活断層の解説</div>
+    <p style="font-size:0.85em;color:#8b949e;margin-bottom:16px">
+      産総研（産業技術総合研究所）の活断層データベースに基づく主要断層。<br>
+      S ランク = 平均変位速度が高い・地震規模が大きいと評価される断層。
+    </p>
+    <div class="fault-grid">
+      <div class="fault-card">
+        <h3>野島断層（兵庫県）</h3>
+        <span class="tag tag-s">S ランク</span>
+        <p>1995年阪神・淡路大震災（M7.3）を引き起こした断層。全長約60km。淡路島北部〜神戸市を縦断。右横ずれ断層で地表変位が明確に観察された。</p>
+      </div>
+      <div class="fault-card">
+        <h3>中央構造線断層帯（四国〜近畿）</h3>
+        <span class="tag tag-s">S ランク</span>
+        <p>全長約360kmの日本最大級の活断層。四国中央部から近畿地方へ延びる。M8クラスの地震を起こす可能性がある日本最大規模の断層帯。</p>
+      </div>
+      <div class="fault-card">
+        <h3>糸魚川—静岡構造線（長野〜静岡）</h3>
+        <span class="tag tag-s">S ランク</span>
+        <p>日本列島をほぼ二分する大断層。全長約250km。フォッサマグナの西縁を成す。M7〜8クラスの地震を引き起こす可能性あり。</p>
+      </div>
+      <div class="fault-card">
+        <h3>立川断層帯（東京都）</h3>
+        <span class="tag tag-s">S ランク</span>
+        <p>首都圏（東京多摩地区〜埼玉県）を通る全長約33kmの断層帯。M7.4程度の地震が想定されており、首都直下地震の震源の一つ。</p>
+      </div>
+      <div class="fault-card">
+        <h3>三浦半島断層群（神奈川県）</h3>
+        <span class="tag tag-a">A ランク</span>
+        <p>神奈川県三浦半島に分布する断層群。武山断層帯・衣笠・北武断層帯から構成。M6.7〜7.0程度の地震が想定される。</p>
+      </div>
+      <div class="fault-card">
+        <h3>山形盆地断層帯（山形県）</h3>
+        <span class="tag tag-s">S ランク</span>
+        <p>山形盆地西縁に位置する全長約81kmの逆断層帯。M7.7程度の地震が想定。1999年に活断層として認定された。</p>
+      </div>
+      <div class="fault-card">
+        <h3>長町—利府線断層帯（宮城県）</h3>
+        <span class="tag tag-s">S ランク</span>
+        <p>仙台市直下を通る全長約38kmの断層帯。M7.0〜7.5程度の地震が想定されており、仙台都市圏への影響が大きい。</p>
+      </div>
+      <div class="fault-card">
+        <h3>花折断層帯（京都府）</h3>
+        <span class="tag tag-s">S ランク</span>
+        <p>京都市の東方を南北に走る全長約56kmの断層帯。M7.5程度の地震が想定。過去に複数回の活動履歴がある古都直下の活断層。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 今後の地震発生予測 -->
+  <div class="section">
+    <div class="section-title">🔮 今後30年以内の地震発生確率（地震調査委員会 公式評価）</div>
+    <p style="font-size:0.82em;color:#8b949e;margin-bottom:14px">
+      ※ 以下の数値は<strong style="color:#c9d1d9">地震調査研究推進本部（文部科学省）</strong>が公表している確率評価です。<br>
+      予測ではなく「過去の活動履歴から統計的に算出した発生確率」であり、この期間内に必ず発生するものではありません。
+    </p>
+    <div class="risk-grid">
+      <div class="risk-card" style="border-color:#e74c3c">
+        <h3>南海トラフ巨大地震</h3>
+        <div class="prob" style="color:#e74c3c">70〜80%</div>
+        <p>想定規模: <strong style="color:#c9d1d9">M8〜9クラス</strong><br>
+        震源域: 駿河湾から日向灘沖（静岡〜宮崎）<br>
+        最大津波高: 高知県で34m超（内閣府想定）<br>
+        被害想定: 死者最大32万人・経済損失220兆円超（内閣府 2013年推計）</p>
+        <p class="source">出典: 地震調査委員会「南海トラフ沿いの地震活動の長期評価（第3版）」2022年</p>
+      </div>
+      <div class="risk-card" style="border-color:#e74c3c">
+        <h3>首都直下地震（M7クラス）</h3>
+        <div class="prob" style="color:#e74c3c">70%程度</div>
+        <p>想定規模: <strong style="color:#c9d1d9">M7.3</strong>（都心南部直下型）<br>
+        震度6強以上の地域: 東京23区・神奈川・埼玉の広域<br>
+        被害想定: 死者最大2.3万人・全壊・焼失61万棟（内閣府 2013年推計）<br>
+        発生時間帯によって被害規模が大きく変動する。</p>
+        <p class="source">出典: 地震調査委員会「首都直下地震の長期評価について」2004年／内閣府 2013年被害想定</p>
+      </div>
+      <div class="risk-card" style="border-color:#e67e22">
+        <h3>千島海溝・日本海溝（北海道〜東北）</h3>
+        <div class="prob" style="color:#e67e22">7〜40%</div>
+        <p>想定規模: <strong style="color:#c9d1d9">M9クラス</strong>（超巨大地震）<br>
+        千島海溝沿いM9: 発生確率 7〜40%（30年以内）<br>
+        北海道太平洋岸・東北北部に巨大津波の危険性。<br>
+        2021年12月の政府中間報告で新たに注目された震源域。</p>
+        <p class="source">出典: 地震調査委員会「千島海溝沿いの地震活動の長期評価（第2版）」2017年・2022年追補</p>
+      </div>
+      <div class="risk-card" style="border-color:#e67e22">
+        <h3>中央構造線断層帯（四国〜近畿）</h3>
+        <div class="prob" style="color:#e67e22">0.1〜8%</div>
+        <p>想定規模: <strong style="color:#c9d1d9">M7.5〜8.0</strong><br>
+        四国中央部〜近畿を横断する日本最長クラスの断層帯。<br>
+        過去の活動間隔: 1,000〜2,000年程度。<br>
+        南海トラフ地震と連動発生する可能性が指摘されている。</p>
+        <p class="source">出典: 地震調査委員会「中央構造線断層帯の長期評価（第二版）」2020年</p>
+      </div>
+      <div class="risk-card" style="border-color:#f1c40f">
+        <h3>立川断層帯（東京多摩〜埼玉）</h3>
+        <div class="prob" style="color:#f1c40f">0.5〜2%</div>
+        <p>想定規模: <strong style="color:#c9d1d9">M7.4</strong><br>
+        東京都多摩地区・埼玉県を通過する活断層。<br>
+        最後の活動: 約1万〜約2万年前と推定。<br>
+        首都圏西部に深刻な被害をもたらす可能性がある。</p>
+        <p class="source">出典: 地震調査委員会「立川断層帯の長期評価」2010年</p>
+      </div>
+      <div class="risk-card" style="border-color:#f1c40f">
+        <h3>花折断層帯（京都市）</h3>
+        <div class="prob" style="color:#f1c40f">ほぼ0〜0.4%</div>
+        <p>想定規模: <strong style="color:#c9d1d9">M7.5</strong><br>
+        京都市の直下を通る断層帯。最後の活動: 約2,000年前。<br>
+        文化財・木造建築が密集するエリアで火災拡大リスクが高い。<br>
+        京都市は独自の地震ハザードマップを公開済み。</p>
+        <p class="source">出典: 地震調査委員会「花折断層帯の長期評価」2004年</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 防災対策チェックリスト -->
+  <div class="section">
+    <div class="section-title">🛡 推奨される防災対策（内閣府・消防庁ガイドライン準拠）</div>
+    <p style="font-size:0.82em;color:#8b949e;margin-bottom:14px">
+      内閣府「防災情報のページ」および消防庁「地震対策アクション・プログラム」に基づく対策項目。
+    </p>
+    <div class="grid-2">
+      <div class="card">
+        <div style="font-weight:700;color:#f0f6fc;margin-bottom:12px">🏠 住まいの備え</div>
+        <ul class="measure-list">
+          <li><span class="icon">📦</span><div class="body"><strong>非常用持出し袋の準備</strong><span>水（1人3L/日×3日分）・食料（3日〜7日分）・救急セット・懐中電灯・ラジオ・充電器・現金・通帳コピー</span></div></li>
+          <li><span class="icon">🔩</span><div class="body"><strong>家具の固定</strong><span>タンス・冷蔵庫・本棚を壁にL字金具で固定。転倒防止ポールの設置。ガラスには飛散防止フィルム。</span></div></li>
+          <li><span class="icon">🏚</span><div class="body"><strong>建物の耐震診断・改修</strong><span>1981年以前の旧耐震基準の建物は特に重要。多くの自治体が無料耐震診断・補助金制度を提供。</span></div></li>
+          <li><span class="icon">🔥</span><div class="body"><strong>火災対策</strong><span>感震ブレーカーの設置（阪神・淡路では火災の多くが通電後に発生）。ガスの自動停止弁確認。</span></div></li>
+          <li><span class="icon">🌊</span><div class="body"><strong>ハザードマップの確認</strong><span>国土交通省「ハザードマップポータルサイト」で自宅・職場の浸水・津波・土砂リスクを確認。</span></div></li>
+        </ul>
+      </div>
+      <div class="card">
+        <div style="font-weight:700;color:#f0f6fc;margin-bottom:12px">👥 コミュニティ・行動の備え</div>
+        <ul class="measure-list">
+          <li><span class="icon">📍</span><div class="body"><strong>避難場所・経路の確認</strong><span>指定緊急避難場所・指定避難所（洪水・地震・津波で異なる場合あり）を事前に確認。複数ルートを把握。</span></div></li>
+          <li><span class="icon">📱</span><div class="body"><strong>緊急連絡手段の確保</strong><span>災害用伝言ダイヤル（171）の使い方を家族全員で練習。SNS安否確認機能の事前登録（Yahoo!防災速報等）。</span></div></li>
+          <li><span class="icon">👨‍👩‍👧</span><div class="body"><strong>家族間の集合場所・ルール決め</strong><span>「○○公園で落ち合う」「連絡がつかない場合は□□に避難」など事前に取り決め。</span></div></li>
+          <li><span class="icon">🏥</span><div class="body"><strong>医療・薬の備え</strong><span>常備薬を最低1週間分確保。お薬手帳のコピーを非常袋に。かかりつけ医の連絡先メモ。</span></div></li>
+          <li><span class="icon">💰</span><div class="body"><strong>経済的備え</strong><span>地震保険の加入確認。現金の手元確保（ATM・電子決済が使えなくなるケースあり）。罹災証明書の申請方法を把握。</span></div></li>
+        </ul>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div style="font-weight:700;color:#f0f6fc;margin-bottom:12px">⚡ 地震発生直後の行動（内閣府・消防庁 推奨）</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;font-size:0.85em">
+        <div style="background:#1c2129;padding:12px;border-radius:8px">
+          <div style="font-weight:700;color:#58a6ff;margin-bottom:6px">① 揺れが収まるまで</div>
+          <div style="color:#8b949e">テーブルの下に隠れる。頭を守る。ドアを開けて逃げ道確保。炎・ガス機器から離れる。</div>
+        </div>
+        <div style="background:#1c2129;padding:12px;border-radius:8px">
+          <div style="font-weight:700;color:#58a6ff;margin-bottom:6px">② 揺れ収束後</div>
+          <div style="color:#8b949e">ガス元栓を閉める。ブレーカーは切らない（感震ブレーカーに任せる）。火の始末。</div>
+        </div>
+        <div style="background:#1c2129;padding:12px;border-radius:8px">
+          <div style="font-weight:700;color:#58a6ff;margin-bottom:6px">③ 避難判断</div>
+          <div style="color:#8b949e">津波警報→即座に高台へ。火災・倒壊リスクがあれば早期避難。「大丈夫だろう」の正常性バイアスに注意。</div>
+        </div>
+        <div style="background:#1c2129;padding:12px;border-radius:8px">
+          <div style="font-weight:700;color:#58a6ff;margin-bottom:6px">④ 情報収集</div>
+          <div style="color:#8b949e">ラジオ・NHK・気象庁公式で正確な情報を。SNSのデマに注意。余震に備える。</div>
+        </div>
+      </div>
+      <p style="font-size:0.78em;color:#8b949e;margin-top:12px">
+        出典: 内閣府「避難情報に関するガイドライン」2021年 / 消防庁「地震被害を減らすために」/ 気象庁「地震・津波」
+      </p>
+    </div>
+  </div>
+
+  <!-- データ解説 -->
+  <div class="section">
+    <div class="card">
+      <div class="section-title">📌 このページについて</div>
+      <p style="font-size:0.85em;color:#8b949e;line-height:1.8">
+        <strong style="color:#c9d1d9">地震データ出典:</strong>
+        <a href="https://earthquake.usgs.gov/" target="_blank">USGS（米国地質調査所）</a>
+        — FDSN Web Services API。日本周辺（北緯24〜46度・東経123〜146度）を対象。<br>
+        <strong style="color:#c9d1d9">活断層情報出典:</strong>
+        <a href="https://gbank.gsj.jp/activefault/" target="_blank">産業技術総合研究所（産総研）活断層データベース</a>
+        — 活断層研究センター提供。<br>
+        <strong style="color:#c9d1d9">地図:</strong>
+        <a href="https://www.openstreetmap.org/" target="_blank">OpenStreetMap</a>
+        （地図データ © OpenStreetMap contributors）、Leaflet.js。<br>
+        <strong style="color:#c9d1d9">更新頻度:</strong> 毎日 00:00 および 12:00 (JST) に自動更新。<br>
+        <strong style="color:#c9d1d9">注意:</strong>
+        このページはDR（災害対策）の参考情報として提供しています。
+        緊急時は必ず<a href="https://www.jma.go.jp/jma/index.html" target="_blank">気象庁</a>の公式発表を参照してください。
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  DR対策 — 日本地震・活断層モニター　|　データ: USGS / 産総研　|　最終更新: 2026年06月26日 23:15 JST
+</footer>
+
+<script>
+// ── マップ初期化 ─────────────────────────────────────────────────────────
+const map = L.map('map', {center: [36.5, 136.0], zoom: 5});
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors',
+  maxZoom: 18
+}).addTo(map);
+
+// 産総研 活断層 WMS
+L.tileLayer.wms('https://gbank.gsj.jp/activefault/wms', {
+  layers: 'active_fault_all',
+  format: 'image/png',
+  transparent: true,
+  opacity: 0.75,
+  attribution: '活断層: 産総研 活断層データベース'
+}).addTo(map);
+
+// 地震プロット
+const geojson = {"type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [138.8566, 35.5228]}, "properties": {"time": "06/26 22:29", "mag": 5.7, "place": "7 km N of Oshino, Japan", "depth": 50.9, "color": "#e67e22", "radius": 14.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.9911, 40.0393]}, "properties": {"time": "06/26 16:22", "mag": 4.4, "place": "99 km ENE of Miyako, Japan", "depth": 39.2, "color": "#f1c40f", "radius": 11.0}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [140.5099, 35.6314]}, "properties": {"time": "06/26 12:46", "mag": 5.8, "place": "3 km SE of Yokoshiba, Japan", "depth": 43, "color": "#e67e22", "radius": 14.5}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.963, 40.4803]}, "properties": {"time": "06/26 01:11", "mag": 4.7, "place": "36 km NNE of Kuji, Japan", "depth": 63.1, "color": "#f1c40f", "radius": 11.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.0284, 40.4809]}, "properties": {"time": "06/25 20:58", "mag": 4.8, "place": "39 km NE of Kuji, Japan", "depth": 66.6, "color": "#f1c40f", "radius": 12.0}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [140.5797, 42.1218]}, "properties": {"time": "06/25 12:18", "mag": 4.4, "place": "22 km WNW of Shikabe, Japan", "depth": 127.9, "color": "#f1c40f", "radius": 11.0}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.2262, 40.4991]}, "properties": {"time": "06/25 09:33", "mag": 4.3, "place": "52 km NE of Kuji, Japan", "depth": 64.6, "color": "#f1c40f", "radius": 10.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.0981, 40.2912]}, "properties": {"time": "06/25 07:30", "mag": 6.9, "place": "30 km ENE of Kuji, Japan", "depth": 50.9, "color": "#e74c3c", "radius": 17.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.082, 30.4603]}, "properties": {"time": "06/23 20:36", "mag": 4.5, "place": "Izu Islands, Japan region", "depth": 10, "color": "#f1c40f", "radius": 11.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [125.4161, 24.7817]}, "properties": {"time": "06/23 07:20", "mag": 4.6, "place": "10 km E of Miyakojima, Japan", "depth": 35, "color": "#f1c40f", "radius": 11.5}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.7687, 30.9738]}, "properties": {"time": "06/22 05:28", "mag": 4.4, "place": "Izu Islands, Japan region", "depth": 10, "color": "#f1c40f", "radius": 11.0}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.5699, 30.8811]}, "properties": {"time": "06/20 22:12", "mag": 4.5, "place": "Izu Islands, Japan region", "depth": 16.0, "color": "#f1c40f", "radius": 11.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [145.3692, 42.8784]}, "properties": {"time": "06/20 05:39", "mag": 4.3, "place": "45 km ESE of Akkeshi, Japan", "depth": 81.0, "color": "#f1c40f", "radius": 10.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [127.9523, 25.0026]}, "properties": {"time": "06/20 04:36", "mag": 4.9, "place": "127 km SSE of Itoman, Japan", "depth": 8.5, "color": "#f1c40f", "radius": 12.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [137.6686, 36.815]}, "properties": {"time": "06/20 03:16", "mag": 4.5, "place": "20 km SE of Ny\u016bzen, Japan", "depth": 216.3, "color": "#f1c40f", "radius": 11.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [143.6179, 40.0106]}, "properties": {"time": "06/20 01:47", "mag": 4.7, "place": "149 km ENE of Miyako, Japan", "depth": 10, "color": "#f1c40f", "radius": 11.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [137.5094, 42.8008]}, "properties": {"time": "06/19 16:26", "mag": 4.2, "place": "208 km ESE of Ol\u2019ga, Russia", "depth": 285.1, "color": "#f1c40f", "radius": 10.5}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.8497, 37.3601]}, "properties": {"time": "06/19 07:33", "mag": 4.3, "place": "73 km E of Tomioka, Japan", "depth": 52.1, "color": "#f1c40f", "radius": 10.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.2657, 30.6099]}, "properties": {"time": "06/19 04:17", "mag": 5.3, "place": "Izu Islands, Japan region", "depth": 10, "color": "#e67e22", "radius": 13.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [144.6073, 38.8127]}, "properties": {"time": "06/17 23:28", "mag": 4.7, "place": "240 km ESE of Yamada, Japan", "depth": 10, "color": "#f1c40f", "radius": 11.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [130.4569, 28.5268]}, "properties": {"time": "06/17 08:18", "mag": 4.5, "place": "84 km E of Tatsug\u014d, Japan", "depth": 10, "color": "#f1c40f", "radius": 11.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [143.1045, 39.9283]}, "properties": {"time": "06/17 02:25", "mag": 4.5, "place": "104 km ENE of Miyako, Japan", "depth": 35, "color": "#f1c40f", "radius": 11.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [139.8371, 35.9814]}, "properties": {"time": "06/16 19:46", "mag": 5.5, "place": "4 km NW of Noda, Japan", "depth": 71.8, "color": "#e67e22", "radius": 13.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.0533, 32.4153]}, "properties": {"time": "06/16 11:52", "mag": 4.7, "place": "Izu Islands, Japan region", "depth": 10, "color": "#f1c40f", "radius": 11.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.9389, 31.5446]}, "properties": {"time": "06/16 11:11", "mag": 4.6, "place": "Izu Islands, Japan region", "depth": 10, "color": "#f1c40f", "radius": 11.5}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [132.4228, 30.7078]}, "properties": {"time": "06/16 04:21", "mag": 4.4, "place": "136 km E of Nishinoomote, Japan", "depth": 13.4, "color": "#f1c40f", "radius": 11.0}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.0962, 30.7654]}, "properties": {"time": "06/15 18:40", "mag": 4.8, "place": "Izu Islands, Japan region", "depth": 10, "color": "#f1c40f", "radius": 12.0}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [143.224, 39.8388]}, "properties": {"time": "06/15 11:06", "mag": 4.3, "place": "112 km E of Miyako, Japan", "depth": 35, "color": "#f1c40f", "radius": 10.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [143.3268, 40.8124]}, "properties": {"time": "06/15 08:46", "mag": 4.3, "place": "149 km ENE of Kuji, Japan", "depth": 35, "color": "#f1c40f", "radius": 10.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.7873, 38.1355]}, "properties": {"time": "06/13 04:49", "mag": 4.4, "place": "45 km SE of Onagawa Ch\u014d, Japan", "depth": 77.1, "color": "#f1c40f", "radius": 11.0}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [138.4351, 29.9909]}, "properties": {"time": "06/12 09:20", "mag": 4.6, "place": "Izu Islands, Japan region", "depth": 475.2, "color": "#f1c40f", "radius": 11.5}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.9229, 40.33]}, "properties": {"time": "06/12 03:37", "mag": 4.2, "place": "97 km ENE of Noda, Japan", "depth": 35, "color": "#f1c40f", "radius": 10.5}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.9444, 38.6945]}, "properties": {"time": "06/11 23:22", "mag": 4.4, "place": "46 km SSE of \u014cfunato, Japan", "depth": 78.8, "color": "#f1c40f", "radius": 11.0}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.9958, 41.6487]}, "properties": {"time": "06/11 14:02", "mag": 4.2, "place": "76 km ENE of Mutsu, Japan", "depth": 58.8, "color": "#f1c40f", "radius": 10.5}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [135.6736, 43.6289]}, "properties": {"time": "06/10 19:34", "mag": 5.7, "place": "33 km ESE of Ol\u2019ga, Russia", "depth": 343.3, "color": "#e67e22", "radius": 14.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [143.2607, 39.751]}, "properties": {"time": "06/10 16:14", "mag": 4.5, "place": "113 km E of Miyako, Japan", "depth": 28.2, "color": "#f1c40f", "radius": 11.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.9978, 39.7723]}, "properties": {"time": "06/10 06:34", "mag": 4.4, "place": "14 km NNE of Miyako, Japan", "depth": 53.4, "color": "#f1c40f", "radius": 11.0}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [139.6159, 27.8986]}, "properties": {"time": "06/09 23:07", "mag": 4.1, "place": "Bonin Islands, Japan region", "depth": 508.5, "color": "#f1c40f", "radius": 10.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [129.9686, 27.0699]}, "properties": {"time": "06/09 07:37", "mag": 4.3, "place": "122 km ESE of Isen, Japan", "depth": 10, "color": "#f1c40f", "radius": 10.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.7958, 37.7755]}, "properties": {"time": "06/09 07:26", "mag": 4.4, "place": "73 km ENE of Minami-S\u014dma, Japan", "depth": 72.4, "color": "#f1c40f", "radius": 11.0}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [144.4302, 38.0943]}, "properties": {"time": "06/08 22:49", "mag": 4.3, "place": "258 km ESE of Kamaishi, Japan", "depth": 10, "color": "#f1c40f", "radius": 10.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.9873, 30.668]}, "properties": {"time": "06/07 22:36", "mag": 4.6, "place": "Izu Islands, Japan region", "depth": 10, "color": "#f1c40f", "radius": 11.5}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.0176, 39.5946]}, "properties": {"time": "06/07 05:15", "mag": 4.1, "place": "8 km SE of Miyako, Japan", "depth": 58.6, "color": "#f1c40f", "radius": 10.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [143.5653, 39.1924]}, "properties": {"time": "06/07 05:02", "mag": 4.4, "place": "142 km ESE of Yamada, Japan", "depth": 10, "color": "#f1c40f", "radius": 11.0}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.2865, 40.2924]}, "properties": {"time": "06/07 03:52", "mag": 4.7, "place": "44 km ENE of Noda, Japan", "depth": 57.3, "color": "#f1c40f", "radius": 11.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [140.7903, 33.2708]}, "properties": {"time": "06/06 20:29", "mag": 4.6, "place": "208 km SSE of Tateyama, Japan", "depth": 69.7, "color": "#f1c40f", "radius": 11.5}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [140.6423, 30.4644]}, "properties": {"time": "06/06 11:25", "mag": 4.5, "place": "Izu Islands, Japan region", "depth": 120.6, "color": "#f1c40f", "radius": 11.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.7041, 31.5202]}, "properties": {"time": "06/06 07:24", "mag": 4.7, "place": "Izu Islands, Japan region", "depth": 10, "color": "#f1c40f", "radius": 11.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.7296, 30.5728]}, "properties": {"time": "06/05 17:29", "mag": 4.1, "place": "Izu Islands, Japan region", "depth": 10, "color": "#f1c40f", "radius": 10.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [143.6821, 39.8673]}, "properties": {"time": "06/05 02:46", "mag": 4.6, "place": "151 km E of Miyako, Japan", "depth": 10, "color": "#f1c40f", "radius": 11.5}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [143.5768, 39.9163]}, "properties": {"time": "06/05 02:44", "mag": 4.6, "place": "143 km ENE of Miyako, Japan", "depth": 10, "color": "#f1c40f", "radius": 11.5}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [145.6789, 43.972]}, "properties": {"time": "06/04 22:37", "mag": 4.1, "place": "15 km WSW of Yuzhno-Kurilsk, Russia", "depth": 140.1, "color": "#f1c40f", "radius": 10.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [129.4273, 29.7335]}, "properties": {"time": "06/04 04:02", "mag": 4.7, "place": "113 km WSW of Kurio, Japan", "depth": 169.9, "color": "#f1c40f", "radius": 11.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.0806, 29.293]}, "properties": {"time": "06/03 21:29", "mag": 4.6, "place": "Izu Islands, Japan region", "depth": 17.1, "color": "#f1c40f", "radius": 11.5}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [131.4442, 31.1063]}, "properties": {"time": "06/03 05:58", "mag": 4.8, "place": "46 km SSE of Kushima, Japan", "depth": 40.0, "color": "#f1c40f", "radius": 12.0}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.8206, 30.6053]}, "properties": {"time": "06/02 19:14", "mag": 4.5, "place": "Izu Islands, Japan region", "depth": 10, "color": "#f1c40f", "radius": 11.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [143.1876, 39.8501]}, "properties": {"time": "06/02 17:09", "mag": 4.3, "place": "109 km ENE of Miyako, Japan", "depth": 43.7, "color": "#f1c40f", "radius": 10.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [140.5166, 37.0734]}, "properties": {"time": "06/02 00:51", "mag": 4.3, "place": "9 km E of Asakawa, Japan", "depth": 53.2, "color": "#f1c40f", "radius": 10.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.6717, 39.362]}, "properties": {"time": "06/01 22:30", "mag": 4.3, "place": "63 km E of Yamada, Japan", "depth": 42.2, "color": "#f1c40f", "radius": 10.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.7303, 30.6614]}, "properties": {"time": "06/01 12:58", "mag": 4.4, "place": "Izu Islands, Japan region", "depth": 10, "color": "#f1c40f", "radius": 11.0}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.7398, 30.6616]}, "properties": {"time": "06/01 12:34", "mag": 5.7, "place": "Izu Islands, Japan region", "depth": 11, "color": "#e67e22", "radius": 14.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.4573, 32.8845]}, "properties": {"time": "06/01 11:51", "mag": 4.3, "place": "Izu Islands, Japan region", "depth": 10, "color": "#f1c40f", "radius": 10.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.5461, 33.0469]}, "properties": {"time": "06/01 11:28", "mag": 4.4, "place": "off the east coast of Honshu, Japan", "depth": 10, "color": "#f1c40f", "radius": 11.0}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [138.199, 37.3943]}, "properties": {"time": "06/01 05:54", "mag": 4.4, "place": "27 km N of J\u014detsu, Japan", "depth": 34.8, "color": "#f1c40f", "radius": 11.0}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [143.7997, 26.4771]}, "properties": {"time": "06/01 04:46", "mag": 4.7, "place": "Bonin Islands, Japan region", "depth": 10, "color": "#f1c40f", "radius": 11.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [139.7655, 27.479]}, "properties": {"time": "05/31 23:26", "mag": 4.5, "place": "Bonin Islands, Japan region", "depth": 522.2, "color": "#f1c40f", "radius": 11.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.3186, 40.3629]}, "properties": {"time": "05/31 21:36", "mag": 4.3, "place": "50 km ENE of Kuji, Japan", "depth": 43.2, "color": "#f1c40f", "radius": 10.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.1925, 40.2167]}, "properties": {"time": "05/31 19:58", "mag": 4.2, "place": "34 km ENE of Noda, Japan", "depth": 54.0, "color": "#f1c40f", "radius": 10.5}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [128.4719, 27.4627]}, "properties": {"time": "05/31 10:58", "mag": 4.4, "place": "17 km NNW of China, Japan", "depth": 35, "color": "#f1c40f", "radius": 11.0}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [143.8479, 42.9596]}, "properties": {"time": "05/30 23:34", "mag": 4.5, "place": "19 km W of Shiranuka, Japan", "depth": 105.6, "color": "#f1c40f", "radius": 11.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.4367, 40.4563]}, "properties": {"time": "05/30 22:27", "mag": 4, "place": "64 km ENE of Kuji, Japan", "depth": 53.7, "color": "#f1c40f", "radius": 10.0}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [140.3374, 35.4152]}, "properties": {"time": "05/30 06:38", "mag": 4.2, "place": "3 km ESE of Mobara, Japan", "depth": 38.2, "color": "#f1c40f", "radius": 10.5}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [125.6183, 26.9636]}, "properties": {"time": "05/30 00:20", "mag": 4.2, "place": "219 km W of Ie, Japan", "depth": 230.1, "color": "#f1c40f", "radius": 10.5}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.1381, 24.7302]}, "properties": {"time": "05/29 22:17", "mag": 4.2, "place": "Volcano Islands, Japan region", "depth": 218.2, "color": "#f1c40f", "radius": 10.5}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.688, 33.092]}, "properties": {"time": "05/29 19:15", "mag": 4.5, "place": "off the east coast of Honshu, Japan", "depth": 10, "color": "#f1c40f", "radius": 11.25}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.8934, 39.0443]}, "properties": {"time": "05/29 17:53", "mag": 4.2, "place": "15 km ESE of \u014cfunato, Japan", "depth": 61.9, "color": "#f1c40f", "radius": 10.5}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [123.2707, 24.7693]}, "properties": {"time": "05/28 19:25", "mag": 4.3, "place": "43 km NE of Yonakuni, Japan", "depth": 104.1, "color": "#f1c40f", "radius": 10.75}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [142.1233, 41.8859]}, "properties": {"time": "05/28 12:55", "mag": 4.4, "place": "53 km SSW of Shizunai-furukawach\u014d, Japan", "depth": 92.9, "color": "#f1c40f", "radius": 11.0}}]};
+L.geoJSON(geojson, {
+  pointToLayer: function(f, latlng) {
+    const p = f.properties;
+    return L.circleMarker(latlng, {
+      radius: p.radius,
+      fillColor: p.color,
+      color: '#fff',
+      weight: 0.5,
+      opacity: 0.9,
+      fillOpacity: 0.65
+    });
+  },
+  onEachFeature: function(f, layer) {
+    const p = f.properties;
+    layer.bindPopup(
+      `<b>M${p.mag.toFixed(1)}</b> — ${p.time}<br>` +
+      `${p.place}<br>深さ ${p.depth} km`
+    );
+  }
+}).addTo(map);
+
+// 凡例
+const legend = L.control({position: 'bottomright'});
+legend.onAdd = function() {
+  const div = L.DomUtil.create('div');
+  div.style.cssText = 'background:#161b22;padding:10px;border-radius:8px;border:1px solid #30363d;font-size:12px;color:#c9d1d9';
+  div.innerHTML = `
+    <div style="font-weight:700;margin-bottom:6px">マグニチュード</div>
+    <div><span style="color:#e74c3c">●</span> M6以上</div>
+    <div><span style="color:#e67e22">●</span> M5台</div>
+    <div><span style="color:#f1c40f">●</span> M4台</div>
+    <div><span style="color:#3498db">●</span> M3台</div>
+    <div><span style="color:#aaa">●</span> M2台</div>
+    <div style="margin-top:6px;padding-top:6px;border-top:1px solid #30363d">
+      <span style="color:#e74c3c">━</span> 活断層（産総研）
+    </div>`;
+  return div;
+};
+legend.addTo(map);
+
+// ── Chart.js ──────────────────────────────────────────────────────────────
+const chartDefaults = {
+  color: '#8b949e',
+  borderColor: '#30363d',
+};
+Chart.defaults.color = '#8b949e';
+Chart.defaults.borderColor = '#30363d';
+
+// 日別
+const daily = {"labels": ["05/28", "05/29", "05/30", "05/31", "06/01", "06/02", "06/03", "06/04", "06/05", "06/06", "06/07", "06/08", "06/09", "06/10", "06/11", "06/12", "06/13", "06/14", "06/15", "06/16", "06/17", "06/18", "06/19", "06/20", "06/21", "06/22", "06/23", "06/24", "06/25", "06/26"], "values": [2, 3, 4, 4, 7, 3, 2, 2, 3, 3, 4, 1, 3, 3, 2, 2, 1, 0, 3, 4, 3, 0, 3, 5, 0, 1, 2, 0, 4, 4]};
+new Chart(document.getElementById('dailyChart'), {
+  type: 'bar',
+  data: {
+    labels: daily.labels,
+    datasets: [{
+      label: '件数（M3+）',
+      data: daily.values,
+      backgroundColor: '#3498db99',
+      borderColor: '#3498db',
+      borderWidth: 1
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { maxRotation: 45, font: { size: 10 } } },
+      y: { beginAtZero: true, ticks: { stepSize: 1 } }
+    }
+  }
+});
+
+// マグニチュード分布（今月）
+const magData = {"4": 71, "5": 6, "6": 1};
+const magLabels = Object.keys(magData).map(k => `M${k}台`);
+const magValues = Object.values(magData);
+const magColors = ['#aaa','#aaa','#aaa','#3498db','#f1c40f','#e67e22','#e74c3c','#c0392b'];
+new Chart(document.getElementById('magChart'), {
+  type: 'doughnut',
+  data: {
+    labels: magLabels,
+    datasets: [{
+      data: magValues,
+      backgroundColor: magColors.slice(0, magLabels.length),
+      borderColor: '#161b22',
+      borderWidth: 2
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'right', labels: { font: { size: 11 } } }
+    }
+  }
+});
+
+// 年次月別
+const yearData = {"labels": ["2025/06", "2025/07", "2025/08", "2025/09", "2025/10", "2025/11", "2025/12", "2026/01", "2026/02", "2026/03", "2026/04", "2026/05"], "values": [21, 173, 76, 70, 68, 173, 152, 102, 90, 130, 145, 108]};
+new Chart(document.getElementById('yearChart'), {
+  type: 'line',
+  data: {
+    labels: yearData.labels,
+    datasets: [{
+      label: '件数（M3+）',
+      data: yearData.values,
+      borderColor: '#58a6ff',
+      backgroundColor: '#58a6ff22',
+      fill: true,
+      tension: 0.3,
+      pointRadius: 4
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { font: { size: 10 } } },
+      y: { beginAtZero: true }
+    }
+  }
+});
+</script>
+</body>
+</html>
