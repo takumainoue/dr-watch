@@ -100,8 +100,8 @@
 <header>
   <h1>🗾 DR対策 — <span>日本地震・活断層モニター</span></h1>
   <div class="update-info">
-    最終更新: 2026年07月04日 12:55 JST<br>
-    次回更新: 2026年07月05日 00:55 JST
+    最終更新: 2026年07月04日 13:52 JST<br>
+    次回更新: 2026年07月05日 01:52 JST
   </div>
 </header>
 
@@ -122,8 +122,8 @@
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid #30363d;padding-bottom:14px;margin-bottom:14px">
         <div style="font-size:1.5em;font-weight:700;color:#2ecc71;white-space:nowrap">🟢 平常</div>
         <div style="flex:1;min-width:180px;font-size:0.85em;color:#c9d1d9">
-          今日 <strong>1件</strong>　平均比 <strong style="color:#2ecc71">-64%</strong>　最後: <span style="color:#8b949e">58分前（M4.6 91 km SE of Kumano）</span>
-          <div style="margin-top:8px;padding:8px 12px;background:#3d1a1a;border-radius:6px;font-size:0.85em;color:#ff7b72">⚠️ 活動集中エリア: 沖縄・南西諸島</div>
+          今日 <strong>1件</strong>　平均比 <strong style="color:#2ecc71">-64%</strong>　最後: <span style="color:#8b949e">115分前（M4.6 91 km SE of Kumano）</span>
+          
         </div>
       </div>
 
@@ -132,7 +132,7 @@
 
         <div>
           <div style="font-size:0.78em;color:#8b949e;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">⏱ 直近3時間（M1以上）</div>
-          <ul style="list-style:none;font-size:0.88em;line-height:1.9"><li><span style="color:#e67e22;font-weight:700">M4.6</span> 91 km SE of Kumano　<span style="color:#8b949e;font-size:0.85em">58分前</span></li></ul>
+          <ul style="list-style:none;font-size:0.88em;line-height:1.9"><li><span style="color:#e67e22;font-weight:700">M4.6</span> 91 km SE of Kumano　<span style="color:#8b949e;font-size:0.85em">1時間55分前</span></li></ul>
         </div>
 
         <div>
@@ -156,7 +156,7 @@
       <div style="overflow-x:auto">
         <table class="quake-table" style="max-width:600px">
           <thead><tr><th>地域</th><th style="text-align:center">24h発生数</th><th>平常比</th></tr></thead>
-          <tbody><tr><td>東北</td><td style="text-align:center">0件</td><td><span style="color:#2ecc71">― 平常</span></td></tr><tr><td>沖縄・南西諸島</td><td style="text-align:center">1件</td><td><span style="color:#e74c3c;font-weight:700">⚠️ 活発</span></td></tr></tbody>
+          <tbody><tr><td>東北</td><td style="text-align:center">0件</td><td><span style="color:#2ecc71">― 平常</span></td></tr></tbody>
         </table>
       </div>
     </div>
@@ -221,7 +221,7 @@
       </div>
       <div class="card" onclick="showModal('year')" style="cursor:pointer" title="クリックで詳細">
         <h2>📊 今年（M3+） <span style="font-size:0.8em;color:#58a6ff">▸ 詳細</span></h2>
-        <div class="big">1332<span style="font-size:0.4em;color:#8b949e">件</span></div>
+        <div class="big">1330<span style="font-size:0.4em;color:#8b949e">件</span></div>
         <div class="sub">最大 M7.6</div>
       </div>
     </div>
@@ -572,7 +572,7 @@
 </div>
 
 <footer>
-  DR対策 — 日本地震・活断層モニター　|　データ: USGS / 産総研　|　最終更新: 2026年07月04日 12:55 JST
+  DR対策 — 日本地震・活断層モニター　|　データ: USGS / 産総研　|　最終更新: 2026年07月04日 13:52 JST
 </footer>
 
 <script>
@@ -748,7 +748,7 @@ new Chart(document.getElementById('magChart'), {
 });
 
 // 年次月別
-const yearData = {"labels": ["2025/07", "2025/08", "2025/09", "2025/10", "2025/11", "2025/12", "2026/01", "2026/03", "2026/04", "2026/05"], "values": [119, 76, 70, 68, 173, 152, 102, 130, 145, 109]};
+const yearData = {"labels": ["2025/07", "2025/08", "2025/09", "2025/10", "2025/11", "2025/12", "2026/01", "2026/03", "2026/04", "2026/05"], "values": [117, 76, 70, 68, 173, 152, 102, 130, 145, 109]};
 new Chart(document.getElementById('yearChart'), {
   type: 'line',
   data: {
